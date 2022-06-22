@@ -1,370 +1,548 @@
 ---
-theme: default
+theme: seriph
 class: text-center
 highlighter: shiki
 lineNumbers: false
-info: |
-  ## Slidev Starter Template
-  Presentation slides for developers.
-
-  Learn more at [Sli.dev](https://sli.dev)
-drawings:
-  persist: false
 title: Vue Async Tasks
 ---
 
 # Vue Async Tasks
 
+---
+layout: section
+---
 
-<!--
-The last comment block of each slide will be treated as slide notes. It will be visible and editable in Presenter Mode along with the slide. [Read more in the docs](https://sli.dev/guide/syntax.html#notes)
--->
+# Что нужно делать с промисами?
 
 ---
 
-# Что не так с текущими либами?
-
-Какие вообще есть решения:
-
-- `vue-promised`
-- `@vueuse/core` → `useAsyncState`
-- `swrv` - `useSwr`
-- `vue-concurrency`
-- `vue-`
-
----
-
-# What is Slidev?
-
-Slidev is a slides maker and presenter designed for developers, consist of the following features
-
-- 📝 **Text-based** - focus on the content with Markdown, and then style them later
-- 🎨 **Themable** - theme can be shared and used with npm packages
-- 🧑‍💻 **Developer Friendly** - code highlighting, live coding with autocompletion
-- 🤹 **Interactive** - embedding Vue components to enhance your expressions
-- 🎥 **Recording** - built-in recording and camera view
-- 📤 **Portable** - export into PDF, PNGs, or even a hostable SPA
-- 🛠 **Hackable** - anything possible on a webpage
+# Общее для асинхронных операций
 
 <br>
+
+Действия:
+
+- **Async data** - загрузить что-то и получить результат промиса
+- **Async side-effect** - операция без получения результата
+- Abort (иногда) - отменить операцию во время действия
+
+Со стороны Vue
+
+- Иметь реактивное состояние некой операции
+  - pending
+  - rejected + ошибка
+  - fulfilled + результат
+  - aborted
+
+---
+
+# Nice to have
+
+- Автоматическая параметризованная загрузка
+  - keep-alive данных при переключении между параметрами
+    - "грязная" пометка всех данных или только частично
+  - кэширование всех или *каких-то* данных напр. в `localStorage`
+  - чтобы это можно было тестить, без синглтонов
+  - time-to-live
+  - Автоматическая перезагрузка когда:
+    - network change
+    - window focus
+  - Prefetch by key
+- Error Retry для любых операций
+- Pending Delay для любых операций
+  
+---
+layout: section
+---
+
+# `vue-promised`
+
+---
+
+# Загрузка данных и состояние промиса
+
+```ts
+const {
+  data,
+  error,
+  isDelayElapsed,
+  isPending,
+  isRejected,
+  isResolved,
+} = usePromise(axios.get('/users'))
+```
+
+---
+
+# Side-effect callback
+
+```ts
+const myAction = ref<null | Promise<void>>(null)
+
+function doAction() {
+  myAction.value = axios.post('/hey')
+}
+
+const PENDING_DELAY = 500
+const { data } = usePromise(myAction, PENDING_DELAY)
+```
+
+
+---
+clicks: 5
+---
+
+# Параметризованная загрузка, keep-alive
+
+```ts {all|1|3-4|6-17|all}
+const storage = reactive(new Map<number, unknown>())
+
+const userId = ref(42)
+const loadedUser = computed(() => storage.get(userId.value))
+
+const fetchPromise = ref<null | Promise<void>>(null)
+const { isPending } = usePromise(fetchPromise)
+
+watch(
+  userId,
+  (id) => {
+    fetchPromise.value = fetch(`/users/${id}`).then(async (x) => {
+      storage.set(id, await x.json())
+    })
+  },
+  { immediate: true },
+)
+
+return { loadedUser, isPending }
+```
+
+---
+
+# `<Promised />`
+
+```vue
+<template>
+  <Promised :promise="myAction">
+    <template #default="data">{{ data }}</template>
+    <template #pending>...</template>
+  </Promised>
+
+  <Promised :promise="myAction">
+    <template #combined="{ data, error, isPending }">
+      Данные: {{ data }} <br>
+      Ошибка: {{ error }} <br>
+      Загружается? {{ isPending }}
+    </template>
+  </Promised>
+</template>
+```
+
+---
+
+# Pros & Cons
+
 <br>
 
-Read more about [Why Slidev?](https://sli.dev/guide/why)
+Pros:
 
-<!--
-You can have `style` tag in markdown to override the style for the current page.
-Learn more: https://sli.dev/guide/syntax#embedded-styles
--->
+- Простая маленькая либа
+- Pending Delay по умолчанию
+- `<Promised />`
 
-<style>
-h1 {
-  background-color: #2B90B6;
-  background-image: linear-gradient(45deg, #4EC5D4 10%, #146b8c 20%);
-  background-size: 100%;
-  -webkit-background-clip: text;
-  -moz-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  -moz-text-fill-color: transparent;
-}
-</style>
+Cons:
+
+- Проблемы с типами:
+  - `data` - `Ref<null | undefined | T>`. null-проблема
+  - `error` - `Ref<null | undefined | Error>`. null-проблема + `throw` можно делать с чем угодно
+- Нет механизма прерывания операции
+
+---
+layout: section
+---
+
+# `useAsyncState()`
+
+by `@vueuse/core`
 
 ---
 
-# Navigation
+# Просто загрузка
 
-Hover on the bottom-left corner to see the navigation's controls panel, [learn more](https://sli.dev/guide/navigation.html)
+```ts
+const { state, error, isLoading, isReady, execute } = useAsyncState(axios.get('/users'), null, {
+  immediate: false,
+  delay: 600,
+  resetOnExecute: true,
+  onError(e) {
+    console.error(e)
+  },
+})
 
-### Keyboard Shortcuts
+execute(500)
 
-|     |     |
-| --- | --- |
-| <kbd>right</kbd> / <kbd>space</kbd>| next animation or slide |
-| <kbd>left</kbd>  / <kbd>shift</kbd><kbd>space</kbd> | previous animation or slide |
-| <kbd>up</kbd> | previous slide |
-| <kbd>down</kbd> | next slide |
-
-<!-- https://sli.dev/guide/animations.html#click-animations -->
-<img
-  v-click
-  class="absolute -bottom-9 -left-7 w-80 opacity-50"
-  src="https://sli.dev/assets/arrow-bottom-left.svg"
-/>
-<p v-after class="absolute bottom-23 left-45 opacity-30 transform -rotate-10">Here!</p>
+```
 
 ---
-layout: image-right
-image: https://source.unsplash.com/collection/94734566/1920x1080
+clicks: 1
 ---
 
-# Code
+# Параметризованная загрузка
 
-Use code snippets and get the highlighting directly![^1]
+<br>
 
-```ts {all|2|1-6|9|all}
-interface User {
-  id: number
-  firstName: string
-  lastName: string
-  role: string
-}
+Пример 1:
 
-function updateUser(id: number, update: User) {
-  const user = getUser(id)
-  const newUser = { ...user, ...update }
-  saveUser(id, newUser)
+```ts
+const params = reactive({ a: 0, b: 'foo' })
+
+const { execute, state } = useAsyncState(async () => axios.get(`/users/${params.a}/${params.b}`), null)
+
+watch(params, () => execute())
+```
+
+Пример 2:
+
+```ts {all|7-8}
+const { execute } = useAsyncState(async (a: number, b: string) => fetch(`/users/${a}/${b}`), null)
+
+const params = reactive({ a: 0, b: 'foo' })
+
+watch(params, ({ a, b }) => execute(300, a, b))
+
+// OOPS! No type errors!
+execute(500, 'foo', false)
+```
+
+---
+
+# Callback
+
+```ts
+const { isLoading, error, execute } = useAsyncState(async (body: unknown) => {
+  await axios.post('/users/new', body)
+  return null
+}, null)
+
+function createUser(user: { name: string }) {
+  execute(0, user)
 }
 ```
 
-<arrow v-click="3" x1="400" y1="420" x2="230" y2="330" color="#564" width="3" arrowSize="1" />
+Путает:
 
-[^1]: [Learn More](https://sli.dev/guide/syntax.html#line-highlighting)
-
-<style>
-.footnotes-sep {
-  @apply mt-20 opacity-10;
-}
-.footnotes {
-  @apply text-sm opacity-75;
-}
-.footnote-backref {
-  display: none;
-}
-</style>
+- useAsync**State**
+- Два раза давать `null` или что-то другое
 
 ---
 
-# Components
+# Pros & Cons
 
-<div grid="~ cols-2 gap-4">
-<div>
+<br>
 
-You can use Vue components directly inside your slides.
+Pros:
 
-We have provided a few built-in components like `<Tweet/>` and `<Youtube/>` that you can use directly. And adding your custom components is also super easy.
+- отложенный запуск
+- delay
+- `state` - `Ref<T>`. Можно положить свой тип, и самому обработать случай пустого значения нормально.
 
-```html
-<Counter :count="10" />
+Cons:
+
+- `execute()` передаёт аргументы в функцию, но типов нет
+- Некрасиво для side-effect'ов
+
+---
+layout: section
+---
+
+# `swrv`
+
+---
+
+# Примеры
+
+```ts
+const { data, error } = useSWRV('/api/user', fetcher)
+
+return {
+  data,
+  error,
+}
 ```
 
-<!-- ./components/Counter.vue -->
-<Counter :count="10" m="t-4" />
+```ts
+const endpoint = ref('/api/user/Geralt')
+const { data, error, mutate } = useSWRV(endpoint.value, fetch)
 
-Check out [the guides](https://sli.dev/builtin/components.html) for more.
+return {
+  endpoint,
+  data,
+  error,
+}
+```
+
+---
+
+# Prefetch
+
+
+```ts
+import { mutate } from 'swrv'
+
+function prefetch() {
+  mutate(
+    '/api/data',
+    fetch('/api/data').then((res) => res.json())
+  )
+  // the second parameter is a Promise
+  // SWRV will use the result when it resolves
+}
+```
+
+---
+
+# Решения, которые мы заслужили
+
+<div class="grid grid-cols-5 gap-4">
+
+<div class="col-span-2">
+
+```ts
+const STATES = {
+  VALIDATING: 'VALIDATING',
+  PENDING: 'PENDING',
+  SUCCESS: 'SUCCESS',
+  ERROR: 'ERROR',
+  STALE_IF_ERROR: 'STALE_IF_ERROR',
+}
+```
 
 </div>
-<div>
 
-```html
-<Tweet id="1390115482657726468" />
+<div class="col-span-3">
+
+```ts
+export default function (data, error, isValidating) {
+  const state = ref('idle')
+  watchEffect(() => {
+    if (data.value && isValidating.value) {
+      state.value = STATES.VALIDATING
+    } else if (data.value && error.value) {
+      state.value = STATES.STALE_IF_ERROR
+    } else if (data.value === undefined && !error.value) {
+      state.value = STATES.PENDING
+    } else if (data.value && !error.value) {
+      state.value = STATES.SUCCESS
+    } else if (data.value === undefined && error) {
+      state.value = STATES.ERROR
+    }
+  })
+
+  return {
+    state,
+    STATES,
+  }
+}
 ```
-
-<Tweet id="1390115482657726468" scale="0.65" />
 
 </div>
 </div>
 
-
----
-class: px-20
 ---
 
-# Themes
+# продолжение...
 
-Slidev comes with powerful theming support. Themes can provide styles, layouts, components, or even configurations for tools. Switching between themes by just **one edit** in your frontmatter:
-
-<div grid="~ cols-2 gap-2" m="-t-2">
-
-```yaml
----
-theme: default
----
-```
-
-```yaml
----
-theme: seriph
----
-```
-
-<img border="rounded" src="https://github.com/slidevjs/themes/blob/main/screenshots/theme-default/01.png?raw=true">
-
-<img border="rounded" src="https://github.com/slidevjs/themes/blob/main/screenshots/theme-seriph/01.png?raw=true">
-
-</div>
-
-Read more about [How to use a theme](https://sli.dev/themes/use.html) and
-check out the [Awesome Themes Gallery](https://sli.dev/themes/gallery.html).
-
----
-preload: false
----
-
-# Animations
-
-Animations are powered by [@vueuse/motion](https://motion.vueuse.org/).
-
-```html
-<div
-  v-motion
-  :initial="{ x: -80 }"
-  :enter="{ x: 0 }">
-  Slidev
-</div>
-```
-
-<div class="w-60 relative mt-6">
-  <div class="relative w-40 h-40">
-    <img
-      v-motion
-      :initial="{ x: 800, y: -100, scale: 1.5, rotate: -50 }"
-      :enter="final"
-      class="absolute top-0 left-0 right-0 bottom-0"
-      src="https://sli.dev/logo-square.png"
-    />
-    <img
-      v-motion
-      :initial="{ y: 500, x: -100, scale: 2 }"
-      :enter="final"
-      class="absolute top-0 left-0 right-0 bottom-0"
-      src="https://sli.dev/logo-circle.png"
-    />
-    <img
-      v-motion
-      :initial="{ x: 600, y: 400, scale: 2, rotate: 100 }"
-      :enter="final"
-      class="absolute top-0 left-0 right-0 bottom-0"
-      src="https://sli.dev/logo-triangle.png"
-    />
+```vue
+<template>
+  <div>
+    <div v-if="[STATES.ERROR, STATES.STALE_IF_ERROR].includes(state)">
+      {{ error }}
+    </div>
+    <div v-if="[STATES.PENDING].includes(state)">Loading...</div>
+    <div v-if="[STATES.VALIDATING].includes(state)">
+      <!-- serve stale content without "loading" -->
+    </div>
+    <div
+      v-if="
+        [STATES.SUCCESS, STATES.VALIDATING, STATES.STALE_IF_ERROR].includes(
+          state
+        )
+      "
+    >
+      {{ data }}
+    </div>
   </div>
-
-  <div
-    class="text-5xl absolute top-14 left-40 text-[#2B90B6] -z-1"
-    v-motion
-    :initial="{ x: -80, opacity: 0}"
-    :enter="{ x: 0, opacity: 1, transition: { delay: 2000, duration: 1000 } }">
-    Slidev
-  </div>
-</div>
-
-<!-- vue script setup scripts can be directly used in markdown, and will only affects current page -->
-<script setup lang="ts">
-const final = {
-  x: 0,
-  y: 0,
-  rotate: 0,
-  scale: 1,
-  transition: {
-    type: 'spring',
-    damping: 10,
-    stiffness: 20,
-    mass: 2
-  }
-}
-</script>
-
-<div
-  v-motion
-  :initial="{ x:35, y: 40, opacity: 0}"
-  :enter="{ y: 0, opacity: 1, transition: { delay: 3500 } }">
-
-[Learn More](https://sli.dev/guide/animations.html#motion)
-
-</div>
+</template>
+```
 
 ---
 
-# LaTeX
-
-LaTeX is supported out-of-box powered by [KaTeX](https://katex.org/).
+# Pros & Cons
 
 <br>
 
-Inline $\sqrt{3x-1}+(1+x)^2$
+Pros
 
-Block
-$$
-\begin{array}{c}
+- Из коробки простая загрузка по ключам
+- Cache
+- Error Retry
+- Requests Deduplication
+- Prefetch
 
-\nabla \times \vec{\mathbf{B}} -\, \frac1c\, \frac{\partial\vec{\mathbf{E}}}{\partial t} &
-= \frac{4\pi}{c}\vec{\mathbf{j}}    \nabla \cdot \vec{\mathbf{E}} & = 4 \pi \rho \\
+Cons
 
-\nabla \times \vec{\mathbf{E}}\, +\, \frac1c\, \frac{\partial\vec{\mathbf{B}}}{\partial t} & = \vec{\mathbf{0}} \\
+- Глобальное состояние
+- Проблемы с типами
+- Не использовать с колбэками
+- Местами "прикольные" решения
 
-\nabla \cdot \vec{\mathbf{B}} & = 0
+---
+layout: section
+---
 
-\end{array}
-$$
+# `vswr`
 
-<br>
+Это не то же самое, что было только что!
 
-[Learn more](https://sli.dev/guide/syntax#latex)
+--- 
+
+
+# Pros & Cons
+
+Мне лень давать примеры, так что...
+
+Pros:
+
+- Всё, что есть в `swrv`
+- Можно создавать раздельные SWR инстансы
+- Можно свой кэш добавить
+
+Cons:
+
+- Не юзабельно для сайд эффектов
+- Опять null-проблема
+
+---
+layout: section
+---
+
+# И что ты предлагаешь?
 
 ---
 
-# Diagrams
+# `Task<T>`
 
-You can create diagrams / graphs from textual descriptions, directly in your Markdown.
+Базовый кирпичик для всего остального
 
-<div class="grid grid-cols-3 gap-10 pt-4 -mb-6">
+Инкапсулирует
 
-```mermaid {scale: 0.5}
-sequenceDiagram
-    Alice->John: Hello John, how are you?
-    Note over Alice,John: A typical interaction
-```
+- асинхронную
+- непараметризованную
+- повторяемую
+- возможно прерываемую
 
-```mermaid {theme: 'neutral', scale: 0.8}
-graph TD
-B[Text] --> C{Decision}
-C -->|One| D[Result 1]
-C -->|Two| E[Result 2]
-```
-
-```plantuml {scale: 0.7}
-@startuml
-
-package "Some Group" {
-  HTTP - [First Component]
-  [Another Component]
-}
-
-node "Other Groups" {
-  FTP - [Second Component]
-  [First Component] --> FTP
-}
-
-cloud {
-  [Example 1]
-}
-
-
-database "MySql" {
-  folder "This is my folder" {
-    [Folder 3]
-  }
-  frame "Foo" {
-    [Frame 4]
-  }
-}
-
-
-[Another Component] --> [Example 1]
-[Example 1] --> [Folder 3]
-[Folder 3] --> [Frame 4]
-
-@enduml
-```
-
-</div>
-
-[Learn More](https://sli.dev/guide/syntax.html#diagrams)
-
+операцию.
 
 ---
-layout: center
-class: text-center
+
+# Инициализация таски
+
+```ts
+const task = useTask(async (onAbort) => {
+  // do async stuff...
+  await delay(40)
+
+  // handle abort
+  onAbort(() => {
+    // ...
+  })
+
+  // return something (or nothing)
+  return 20
+})
+```
+
 ---
 
-# Learn More
+# Состояние таски
 
-[Documentations](https://sli.dev) · [GitHub](https://github.com/slidevjs/slidev) · [Showcases](https://sli.dev/showcases.html)
+```ts
+watch(
+  () => task.state,
+  (state) => {
+    if (state.kind === 'ok') {
+      console.log(state.result)
+    } else if (state.kind === 'err') {
+      console.error(state.error)
+    } else if (state.kind === 'pending') {
+      console.log('pending...')
+    }
+
+    // also uninint & aborted
+  },
+)
+```
+
+---
+
+# Запуск и прерывание
+
+```ts
+// just run
+task.run()
+
+// abort pending & run new task
+task.run()
+
+// run and wait for exactly this run
+// result is ok, err or aborted
+const result = await task.run()
+
+// just abort
+// auto call on scope dispose
+task.abort()
+```
+
+---
+
+# Утилитки вокруг таски
+
+- `useLastTaskResult(task)`
+- `useDelayedPending(task, delay: MaybeRef<number>): Ref<boolean>`
+- `useDelayedPendingTask<T>(task: Task<T>, delay: MaybeRef<number>): Task<T>`
+- `useStaleIfErrorState(task)`
+- `useErrorRetry()`
+
+---
+
+# Условная загрузка
+
+---
+
+# Параметризованная загрузка
+
+---
+
+# 
+
+---
+
+# Out of Vue
+
+Можно использовать `BareTask<T>`, который почти всё то же, но не хранит состояние:
+
+```ts
+const task = new BareTask(async () => 42)
+const result = await task.run()
+
+expect(result).toEqual({ kind: 'ok', result: 42 })
+```
+
+```ts
+const ERR = new Error('got you')
+const task = new BareTask(async () => {
+  throw ERR
+})
+const result = await task.run()
+
+expect(result).toEqual({ kind: 'err', error: ERR })
+```
