@@ -546,3 +546,86 @@ const result = await task.run()
 
 expect(result).toEqual({ kind: 'err', error: ERR })
 ```
+
+---
+
+# Канва презентации
+
+A -> Z
+
+A: Что нужно от промисов
+
+- Просто загрузить данные откуда-то
+- Автоматически ретраить при ошибках
+- Загружать данные параметризованно, или по условию, автоматически
+- Делать асинхронные сайд эффекты, навешивать на них удобства
+- Отменять операции
+- Состояние промисов (+ pending delay)
+- Дедупликация одинаковых запросов в промежуток времени
+- **Type-strong**
+- Можно мокать
+
+Продвинутая загрузка:
+
+- Stale-While-Revalidate
+- keep-alive данных с разными ключами
+- `localStorage` кэширование
+- Time-To-Live ревалидация
+- Ревалидация при фокусе / появлении сети
+- Prefetch
+
+B: Какие есть сейчас решения, в чём их минусы
+
+Простое:
+
+- `vue-promised` - плохие типы, особый путь с `Ref<Promise>`
+- `@vueuse/core` -> `useAsyncState`. Это только про загрузку. Плохие типы на аргументы внутренней функции
+- ...
+
+SWR:
+
+- `swrv` - всё плохо
+- `vswr` - всё хорошо, хотя к типам можно придраться, может ещё к чему
+
+C: Как новая либа решает различные задачи
+
+- `Task<T>` - база. Объяснить `TaskState<T>`, почему type-strong
+- `useTask()`, `.run()`, `.abort()`
+- Приятные use-as-you-want pluggable утилитки вокруг таски - error retry, last result, whenever ok/err, delayed pending
+- Особая утилитка - `useStaleIfErrorState`. Объяснить `Maybe<T>`, почему type-strong. Такой простой беспамятный SWR.
+- Условная и параметризованная загрузка - `useScope`
+- Сайд эффекты - разные примеры, с параметрами и без, `useDanglingScope`
+  - Простой вызов чего-то без параметров
+  - Вызов с параметрами, берущимися из состояния
+  - Stateless запуск с `useDanglingScope`
+  - Навешиваются все те же утилитки
+- Stale-While-Revalidate - TODO. Со скоупами можно сделать, надо только продумать дизайн, чтобы и кэш был, и ttl, и prefetch, и прочее
+- deduplication, revalidate-on-focus/network - TODO, сделать довольно просто
+- Прочее TODO (?):
+  - run dedup
+  - `useRerun`
+  - all-in-one `usePromise(prom: Promise<T>)`, комбинация `vue-promised` + `@vueuse/core` с нормальными типами. Только для одноразового промиса.
+  - all-in-one `useFullyPackedTask()`, сочетающая в себе `useTask` + все утилитки 
+- Bonus - `BareTask<T>`
+
+D: Просьба дать фидбек, хотят ли использовать, хотят ли помочь
+
+- Насколько такое видится полезным, насколько хочется использовать. Btw лично я буду в любом случае, избавляет от необходимости ставить разные любы и ломать голову, как их дружить.
+- Как назвать либу?
+  - `@vue-async-tasks/*`
+  - `@vue-tasks/*`
+  - `@vue-async/*`
+  - `@vue-use-task/*`
+  - `@vue-use-tasks/*`
+  - `@vue-any-task/*`
+  - `@vue-any-async/*`
+  - `@vue-any-promise/*`
+  - `@vue-futures/*`
+  - `@vue-spawn-async/*`
+  - `@vue-async-spawn/*`
+  - `@sora-vue-promises/*`
+  - `@sora-vue-async/*`
+  - `@yava/*` (Yet Another Vue Async)
+- Если есть мысли, пожелания - contribution welcome
+
+---
