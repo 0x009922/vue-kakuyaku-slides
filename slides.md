@@ -6,37 +6,592 @@ lineNumbers: false
 title: Vue Async Tasks
 ---
 
-# Vue Async Tasks
+# vue-kakuyoku
 
----
-layout: section
----
-
-# Что нужно делать с промисами?
+kakuyoku - обещание
 
 ---
 
-# Общее для асинхронных операций
+
+# `useTask()`
+
+```ts
+const task = useTask(async (onAbort) => {
+  // do any async stuff
+  await delay(750);
+
+  // optional
+  onAbort(() => {
+    // do cleanup
+  });
+
+  return 42;
+});
+
+```
+
+---
+
+# Task usage
+
+
+```ts
+// just run
+task.run()
+
+// abort pending & run new task
+task.run()
+
+// run and wait for exactly this run
+// result is ok, err or aborted
+const result = await task.run()
+
+// just abort
+// auto call on scope dispose
+task.abort()
+```
+
+---
+
+# What is a Task?
 
 <br>
 
-Действия:
+Task is an abstraction around
 
-- **Async data** - загрузить что-то и получить результат промиса
-- **Async side-effect** - операция без получения результата
-- Abort (иногда) - отменить операцию во время действия
-
-Со стороны Vue
-
-- Иметь реактивное состояние некой операции
-  - pending
-  - rejected + ошибка
-  - fulfilled + результат
-  - aborted
+- async function (i.e. returns a `Promise<T>`)
+- unparametrized (i.e. fires without any arguments)
+- (optional) abortable & repeatable
 
 ---
 
-# Nice to have
+# `Task<T>`
+
+```ts
+interface Task<T> {
+  state: TaskState<T>;
+  run: () => Promise<BareTaskRunResult<T>>;
+  abort: () => void;
+}
+
+/** Simplified */
+type BareTaskRunResult<T> =
+  | { kind: "ok"; data: T }
+  | { kind: "err"; error: unknown }
+  | { kind: "aborted" };
+
+/** Simplified */
+type TaskState<T> =
+  | { kind: "uninit" }
+  | { kind: "pending" }
+  | BareTaskRunResult<T>;
+```
+
+- Good TypeScript support for "discriminated" types
+
+---
+
+# Example with a raw Task
+
+```vue
+<script setup>
+const task = useTask(async () => fetch("/users"));
+
+task.run();
+
+function rerun() {
+  task.run();
+}
+</script>
+
+<template>
+  <button @click="rerun">Rerun</button>
+
+  <div v-if="task.state.kind === 'ok'">
+    {{ task.state.data }}
+  </div>
+
+  <div v-else-if="task.state.kind === 'pending'">Loading...</div>
+</template>
+```
+
+---
+
+# not that impressive...
+
+---
+
+# utilities around `Task<T>`
+
+---
+
+# Retry-on-error with `useErrorRetry()`
+
+It is needed so much often...
+
+```ts
+const { retries, reset } = useErrorRetry(task, {
+  count: 7, // default: 5
+  interval: 3_000, // default: 5s
+});
+```
+
+---
+
+# Unwrap task state with `useStaleIfErrorState`
+
+Always access last task result data
+
+```ts
+interface TaskStaleIfErrorState<T> {
+  data: Maybe<T>;
+  error: Maybe<unknown>;
+  pending: boolean;
+  fresh: boolean;
+}
+
+type Maybe<T> = null | { some: T };
+```
+
+- Access to last task result and error even if it is pending now
+- Correct types with `Maybe<T>`
+
+---
+
+# Stale state usage example
+
+```vue
+<script setup>
+const task = useTask(async () => fetch("/users"));
+const state = useStaleIfErrorState(task);
+task.run();
+
+function reload() {
+  task.run();
+}
+</script>
+
+<template>
+  <Users
+    v-if="state.data"
+    :data="state.data.some"
+    :is-fresh="state.fresh"
+  />
+  <Error v-if="state.error" :err="state.error.some" />
+  <Spinner v-if="state.pending" />
+
+  <button :disabled="state.pending" @click="reload">Reload</button>
+</template>
+```
+
+---
+
+# Run side effect whenever task errors/succeeds
+
+```ts
+wheneverTaskErrors(task, (error) => {
+  console.error(error);
+});
+
+wheneverTaskSucceeds(task, (users) => {
+  store.$patch({ users });
+});
+```
+
+---
+
+# `wheneverTaskXXX`
+
+These shorthands are simple
+
+```ts
+wheneverTaskErrors(task, (error) => {
+  console.error(error);
+});
+
+// same as
+
+watch(
+  () => task.state,
+  (state) => {
+    if (state.kind === "err") {
+      fn(state.error);
+    }
+  },
+  {
+    // important default options
+    immediate: true,
+    flush: "sync",
+    ...options,
+  }
+);
+```
+
+---
+
+# Debounce pending state
+
+## Just a single Ref
+
+```ts
+const pending = useDelayedPending(
+  task,
+  // MaybeRef<number>
+  // or 200 by default
+  500
+);
+```
+
+## Make a task wrapper
+
+```ts
+const delayedPendingTask = useDelayedPendingTask(task);
+
+const state = useStaleIfErrorState(delayedPendingTask);
+```
+
+---
+
+# Remember only last task result
+
+```ts
+// null, ok or error
+const lastResult = useLastTaskResult(task);
+```
+
+---
+
+# Flexible task setup with scopes
+
+---
+clicks: 3
+---
+
+# Conditional task **setup**
+
+```ts {all|1|3-12|14-15}
+const isVisible = ref(false);
+
+const scope = useScope(isVisible, () => {
+  const task = useTask(() => fetch("/stats"));
+  const staleState = useStaleIfErrorState(task);
+  useErrorRetry(task);
+  task.run()
+
+  const { run: retry } = task;
+
+  return { retry, state: staleState };
+});
+
+const isPending = computed(() => scope.value?.setup.state.pending ?? false);
+const data = computed(() => scope.value?.setup.state.data?.some ?? null);
+```
+
+---
+
+# Usage of a conditional scope
+
+```vue
+<template>
+  <div>
+    Pending? {{ isPending }} <br />
+    Data? {{ data }}
+
+    <button v-if="scope" @click="scope.setup.retry()">Retry</button>
+  </div>
+</template>
+```
+
+---
+
+# Keyed setup
+
+```ts
+const userId = ref(15);
+
+const scope = useScope(userId, (staticUserId) => {
+  const task = useTask(() => fetch(`/users/${staticUserId}`));
+
+  // setup anything...
+
+  return task;
+});
+
+watchEffect(() => {
+  console.log("scope is always non-null, even in TS:", scope.setup.state);
+});
+```
+
+---
+
+# Keyed + Conditional
+
+```ts
+const isVisible = ref(false);
+const userId = ref(42);
+
+const scope = useScope(
+  computed(() => isVisible.value && userId.value),
+  (staticUserId) => {
+    // ...
+  }
+);
+
+// scope.value is not always exist, according to TS
+// Type Safe!
+```
+
+---
+
+# Bonus: nested scopes setup
+
+```ts
+const key = ref("foo");
+const enableErrorRetry = ref(false);
+
+const scope = useScope(key, (key) => {
+  const task = useTask(() => fetch(`/baz/${key}`));
+
+  useScope(enableErrorRetry, () => {
+    useErrorRetry(task);
+  });
+
+  return useStaleIfErrorState(task);
+});
+```
+
+---
+
+# Dynamic callback dispatch with `useDanglingScope`
+
+---
+
+# submit a form without any scopes
+
+```ts
+// edit reactive bindings with form elements
+const user = reactive({
+  name: "Joe",
+  age: 42,
+});
+
+// our main task
+const submitTask = useTask(() => axios.post("/users", user));
+
+const lastResult = useLastTaskResult(submitTask);
+// can be shown in the template
+const lastError = computed(() =>
+  lastResult.value.kind === "err" ? lastResult.value : null
+);
+
+// task execution
+async function submit() {
+  const result = await submitTask.run();
+  if (result.kind === "ok") {
+    store.updateUsers();
+  }
+}
+```
+
+---
+
+# stateless form submit
+
+```ts
+const lastSubmitTask = useDanglingScope<Task<void>>();
+
+function submit(data: { name: string; age: number }) {
+  lastSubmitTask.setup((dispose) => {
+    const task = useTask(() => axios.post(`/users`, data));
+    task.run();
+
+    // just retry...
+    useErrorRetry(task, { count: Infinity, interval: 1000 });
+
+    // stop retries after 15s
+    useTimeoutFn(() => dispose(), 15_000);
+  });
+}
+
+function forgetLastAction() {
+  lastSubmitTask.dispose();
+}
+```
+
+---
+
+# TODO
+
+- utility: deduplicate tasks runs in a period of time (throttle)
+- utility: transform `onAbort` hook into `AbortSignal`
+- utility: full-packed `useAsyncData()`
+  
+  All the best from `usePromise`(`vue-promised`) + `useAsyncState` (`@vueuse/core`)
+
+  May include all nice stuff like error retry, stale state etc
+
+  - \+ `useFetch()` Fetch API wrapper around `useAsyncData`
+  
+
+- utilities: revalidate on focus / network
+- utilities to keep state alive, external storage; SWR
+- SSR compatibility?
+
+---
+
+# bonus: `BareTask<T>`
+
+- Vue-free core behind `useTask`
+
+```ts
+const readFileTask = new BareTask(() => fs.readFile("vulpes.3a"));
+
+let count = 0;
+while (count++ < 10) {
+  const result = await readFileTask.run();
+
+  if (result.kind === "ok") {
+    console.log(result.value);
+    break;
+  } else if (result.kind === "err") {
+    console.error(result.error);
+  } else {
+    // aborted
+    console.log("impossibru...");
+  }
+}
+```
+
+---
+
+# Comparison with other libraries
+
+---
+
+# `vue-promised`
+
+```ts
+const { data, error, isPending, isResolved, isRejected } = usePromise(
+  fetch("/users")
+);
+
+// or
+
+const prom = ref(null);
+const promState = usePromise(prom);
+
+function runFetch() {
+  prom.value = fetch("/users");
+}
+```
+
+---
+
+# `vue-promised`
+
+- pending delay out of the box
+- `data: Ref<T | null | undefined>` - not really strong
+- `error: Ref<Error | null | undefined>` - again not strong + you can `throw` literally anything, not only `Error`
+- no utils like scopes, error retry, abortation etc
+
+---
+
+# `@vueuse/core`'s `useAsyncState`
+
+```ts
+const { state, isLoading, execute } = useAsyncState(
+  (id: string, page: number) => fetch(`/users/${id}/posts?page=${page}`),
+  null, // init state
+  {
+    immediate: false,
+    resetOnExecute: true,
+  }
+);
+
+execute(
+  // execution delay
+  500,
+  // untyped args...
+  123,
+  "foo",
+  false
+);
+```
+
+--- 
+
+# `@vueuse/core`
+
+- only suitable for state: naming, null returns
+- bad `execute` typing makes arguments passing useless
+- no scope utils
+
+---
+
+# comparison with `swrv`
+
+- only for state
+- bad types
+- fetch-oriented
+- global singleton with all its outcomes
+- a lot of unnecessary non-tree-shakeable utilities
+- weird design decisions
+
+---
+
+# comparison with `vswr`
+
+- only for state
+- null-data type
+- its... fine?
+
+---
+
+# Техническое на этом всё!
+
+---
+
+# Зачем эта презентация?
+
+- Получить фидбек - удобно это выглядит или нет, хочется ли затаскивать на проекты
+- Возможно кто-то захочет помочь в разработке и поддержке либы
+
+---
+
+# Название либы
+
+Было много вариантов:
+
+  - `@vue-async-tasks/*`
+  - `@vue-tasks/*`
+  - `@vue-async/*`
+  - `@vue-use-task/*`
+  - `@vue-use-tasks/*`
+  - `@vue-any-task/*`
+  - `@vue-any-async/*`
+  - `@vue-any-promise/*`
+  - `@vue-futures/*`
+  - `@vue-spawn-async/*`
+  - `@vue-async-spawn/*`
+  - `@sora-vue-promises/*`
+  - `@sora-vue-async/*`
+  - `@yava/*` (Yet Another Vue Async)
+
+---
+
+# Но остановился на `vue-kakuyoku`
+
+<br>
+
+Kakuyoku - обещание (яп.)
+
+Вполне оправдано тем, какой компанией это разрабатывается
+
+---
+
+# Спасибо за внимание!
+
+---
 
 - Автоматическая параметризованная загрузка
   - keep-alive данных при переключении между параметрами
