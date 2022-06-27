@@ -1,0 +1,10 @@
+kbd,
+pre,
+code,
+samp {
+    font-family: 'JetBrains Mono';
+}
+
+.shiki-dark {
+    background: #1b1b1ba0 !important;
+}

@@ -1,71 +1,89 @@
 ---
-theme: seriph
-class: text-center
+theme: shibainu
+title: vue-kakuyaku
 highlighter: shiki
 lineNumbers: false
-title: Vue Async Tasks
+fonts:
+  mono: 'JetBrains Mono'
+  sans: 'Rubik'
+
+layout: cover
 ---
 
-# vue-kakuyoku
+# vue-kakuyaku
 
-kakuyoku - обещание
+Решаем задачи с промисами
 
 ---
+layout: default-2
+---
 
+# 確約 (kakuyaku) - обещание (яп.)
 
-# `useTask()`
+Перевод названия
+
+`vue-kakuyaku` - похоже на `vue-promised`. Но функционалом&hellip; не слишком.
+
+---
+layout: default-3
+---
+
+# С чего начинается либа - `useTask()`
 
 ```ts
 const task = useTask(async (onAbort) => {
-  // do any async stuff
+  // делаем что-нибудь асинхронное
   await delay(750);
 
-  // optional
+  // опционально настраиваем отмену операции
   onAbort(() => {
-    // do cleanup
+    // ...
   });
 
   return 42;
 });
-
 ```
 
 ---
+layout: default-6
+---
 
-# Task usage
 
+# Использование `Task`
 
 ```ts
-// just run
+// запуск;
+// если уже запущено - отмена и запуск снова
 task.run()
 
-// abort pending & run new task
-task.run()
-
-// run and wait for exactly this run
-// result is ok, err or aborted
+// запустить и получить результат именно этого запуска
 const result = await task.run()
 
-// just abort
-// auto call on scope dispose
+// отмена текущей
+// * срабатывает также onScopeDispose
 task.abort()
 ```
 
 ---
-
-# What is a Task?
-
-<br>
-
-Task is an abstraction around
-
-- async function (i.e. returns a `Promise<T>`)
-- unparametrized (i.e. fires without any arguments)
-- (optional) abortable & repeatable
-
+layout: default-4
 ---
 
 # `Task<T>`
+
+Что такое ~~такса~~ таска?
+
+
+`Task<T>` - это абстракция вокруг:
+
+- асинхронной функции (т.е. возвращает `Promise<T>`)
+- непараметризованной (т.е. без аргументов)
+- (опционально) прерываемой & повторяемой
+
+---
+layout: default-3
+---
+
+# Декларация `Task<T>`
 
 ```ts
 interface Task<T> {
@@ -74,24 +92,24 @@ interface Task<T> {
   abort: () => void;
 }
 
-/** Simplified */
+/** упрощённо */
 type BareTaskRunResult<T> =
   | { kind: "ok"; data: T }
   | { kind: "err"; error: unknown }
   | { kind: "aborted" };
 
-/** Simplified */
+/** упрощённо */
 type TaskState<T> =
   | { kind: "uninit" }
   | { kind: "pending" }
   | BareTaskRunResult<T>;
 ```
 
-- Good TypeScript support for "discriminated" types
+- Благодаря дискриминанту `kind` хорошо работает TypeScript
 
 ---
 
-# Example with a raw Task
+# Пример с "сырой" таской
 
 ```vue
 <script setup>
@@ -116,18 +134,24 @@ function rerun() {
 ```
 
 ---
-
-# not that impressive...
-
+layout: quote
 ---
 
-# utilities around `Task<T>`
+# не особо впечатляет...
 
 ---
+layout: section-3
+---
 
-# Retry-on-error with `useErrorRetry()`
+# Утилитки вокруг таски
 
-It is needed so much often...
+---
+layout: default-4
+---
+
+# Error-retry
+
+Это бывает нужно так часто... но при этом не всегда
 
 ```ts
 const { retries, reset } = useErrorRetry(task, {
@@ -137,10 +161,12 @@ const { retries, reset } = useErrorRetry(task, {
 ```
 
 ---
+layout: default-2
+---
 
-# Unwrap task state with `useStaleIfErrorState`
+# Stale-if-error state
 
-Always access last task result data
+Можно всегда иметь последний результат и ошибку таски
 
 ```ts
 interface TaskStaleIfErrorState<T> {
@@ -153,12 +179,16 @@ interface TaskStaleIfErrorState<T> {
 type Maybe<T> = null | { some: T };
 ```
 
-- Access to last task result and error even if it is pending now
-- Correct types with `Maybe<T>`
+- Даже если таска грузится *снова*, её прошлый результат доступен
+- Нет конфузов с наличием data/error даже с точки зрения TS - спасибо `Maybe<T>`
 
 ---
+layout: default
+---
 
-# Stale state usage example
+# `useStaleIfErrorState()`
+
+Утилита в действии
 
 ```vue
 <script setup>
@@ -186,7 +216,9 @@ function reload() {
 
 ---
 
-# Run side effect whenever task errors/succeeds
+# "Whenever task..."
+
+Сайд-эффекты при ошибке/успехе
 
 ```ts
 wheneverTaskErrors(task, (error) => {
@@ -199,17 +231,19 @@ wheneverTaskSucceeds(task, (users) => {
 ```
 
 ---
+layout: default-3
+---
 
-# `wheneverTaskXXX`
+# А изнутри...
 
-These shorthands are simple
+...утилитки сами по себе очень просты
 
 ```ts
 wheneverTaskErrors(task, (error) => {
   console.error(error);
 });
 
-// same as
+// то же что и
 
 watch(
   () => task.state,
@@ -219,7 +253,7 @@ watch(
     }
   },
   {
-    // important default options
+    // важные опции по умолчанию
     immediate: true,
     flush: "sync",
     ...options,
@@ -228,31 +262,35 @@ watch(
 ```
 
 ---
-
-# Debounce pending state
-
-## Just a single Ref
-
-```ts
-const pending = useDelayedPending(
-  task,
-  // MaybeRef<number>
-  // or 200 by default
-  500
-);
-```
-
-## Make a task wrapper
-
-```ts
-const delayedPendingTask = useDelayedPendingTask(task);
-
-const state = useStaleIfErrorState(delayedPendingTask);
-```
-
+layout: default-5
 ---
 
-# Remember only last task result
+# Отложенный "pending"
+
+- `useDelayedPending()` - в виде Ref самого по себе
+
+  ```ts
+  const pending = useDelayedPending(
+    task,
+    // MaybeRef<number>
+    // по умолчанию, например, 200мс
+    500
+  );
+  ```
+
+- `useDelayedPendingTask()` - полная обёртка, в которой "pending" отложенное
+
+  ```ts
+  const delayedPendingTask = useDelayedPendingTask(task);
+
+  const state = useStaleIfErrorState(delayedPendingTask);
+  ```
+
+---
+layout: default-6
+---
+
+# Если нужен любой последний результат таски
 
 ```ts
 // null, ok or error
@@ -260,14 +298,19 @@ const lastResult = useLastTaskResult(task);
 ```
 
 ---
+layout: section
+---
 
-# Flexible task setup with scopes
+# Гибкий **setup** тасок с `useScope()`
 
 ---
 clicks: 3
+layout: default-3
 ---
 
-# Conditional task **setup**
+# Опциональный **setup**
+
+Настройка таски по реактивному условию
 
 ```ts {all|1|3-12|14-15}
 const isVisible = ref(false);
@@ -288,8 +331,10 @@ const data = computed(() => scope.value?.setup.state.data?.some ?? null);
 ```
 
 ---
+layout: default-4
+---
 
-# Usage of a conditional scope
+# Использование
 
 ```vue
 <template>
@@ -303,8 +348,12 @@ const data = computed(() => scope.value?.setup.state.data?.some ?? null);
 ```
 
 ---
+layout: default-6
+---
 
-# Keyed setup
+# **Setup** по ключу
+
+Когда настройка таски зависит от ID'шника, например
 
 ```ts
 const userId = ref(15);
@@ -312,7 +361,7 @@ const userId = ref(15);
 const scope = useScope(userId, (staticUserId) => {
   const task = useTask(() => fetch(`/users/${staticUserId}`));
 
-  // setup anything...
+  // любая логика...
 
   return task;
 });
@@ -323,8 +372,12 @@ watchEffect(() => {
 ```
 
 ---
+layout: default-2
+---
 
-# Keyed + Conditional
+# Ключ + условие
+
+Можно совмещать и условие, и ключ - при этом корректный TypeScript
 
 ```ts
 const isVisible = ref(false);
@@ -337,13 +390,13 @@ const scope = useScope(
   }
 );
 
-// scope.value is not always exist, according to TS
+// TS говорит, что `scope.value` не всегда существует
 // Type Safe!
 ```
 
 ---
 
-# Bonus: nested scopes setup
+# Бонус: вложенная настройка скоупов
 
 ```ts
 const key = ref("foo");
@@ -361,33 +414,40 @@ const scope = useScope(key, (key) => {
 ```
 
 ---
-
-# Dynamic callback dispatch with `useDanglingScope`
-
+layout: section-2
 ---
 
-# submit a form without any scopes
+# Cайд-эффекты
+
+Асинхронные действия и "подвешенные скоупы"
+
+---
+layout: default
+---
+
+# Отправка формы
 
 ```ts
-// edit reactive bindings with form elements
+// редактируем данные формы тут
 const user = reactive({
   name: "Joe",
   age: 42,
 });
 
-// our main task
+// здесь наша таска
 const submitTask = useTask(() => axios.post("/users", user));
 
 const lastResult = useLastTaskResult(submitTask);
-// can be shown in the template
+// ошибку отправки можем показать в форме
 const lastError = computed(() =>
   lastResult.value.kind === "err" ? lastResult.value : null
 );
 
-// task execution
+// запускаем таску
 async function submit() {
   const result = await submitTask.run();
   if (result.kind === "ok") {
+    // делаем что-нибудь в случае успеха, если нам это надо
     store.updateUsers();
   }
 }
@@ -395,7 +455,7 @@ async function submit() {
 
 ---
 
-# stateless form submit
+# Теперь без промежуточных состояний
 
 ```ts
 const lastSubmitTask = useDanglingScope<Task<void>>();
@@ -405,10 +465,11 @@ function submit(data: { name: string; age: number }) {
     const task = useTask(() => axios.post(`/users`, data));
     task.run();
 
-    // just retry...
+    // просто повторяем до бесконечности...
     useErrorRetry(task, { count: Infinity, interval: 1000 });
 
-    // stop retries after 15s
+    // но вообще-то нет, после 15сек перестанем
+    // или когда скоуп уничтожится
     useTimeoutFn(() => dispose(), 15_000);
   });
 }
@@ -422,26 +483,38 @@ function forgetLastAction() {
 
 # TODO
 
-- utility: deduplicate tasks runs in a period of time (throttle)
-- utility: transform `onAbort` hook into `AbortSignal`
-- utility: full-packed `useAsyncData()`
+- утилитка: дедупликация запусков за промежуток времени (троттлинг)
+- утилитка: сделать из хука `onAbort()` сразу `AbortSignal`
+- утилитка: swiss-knife `useAsyncData()`:
   
-  All the best from `usePromise`(`vue-promised`) + `useAsyncState` (`@vueuse/core`)
+  - Сочетание всегда лучшего из `usePromise`(`vue-promised`) + `useAsyncState` (`@vueuse/core`)
 
-  May include all nice stuff like error retry, stale state etc
+  - Может включать в себя и весь "сахар" вроде error retry, stale state, deduplication etc
 
-  - \+ `useFetch()` Fetch API wrapper around `useAsyncData`
+  - \+ `useFetch()` Fetch API обёртка вокруг `useAsyncData()`
   
+- утилитка: revalidate on focus / network
+- SWR: утилитки для сохранения состояния около-глобально, кэширование, TTL
+- поддержка SSR?
+- Протестить либу в боевых условиях! Станет понятно, что ещё нужно, что лишнее, что надо переработать.
 
-- utilities: revalidate on focus / network
-- utilities to keep state alive, external storage; SWR
-- SSR compatibility?
+<style>
+ul {
+  font-size: 0.9rem;
+}
+
+li p {
+  margin: 8px;
+}
+</style>
 
 ---
+layout: default-4
+---
 
-# bonus: `BareTask<T>`
+# Бонус: `BareTask<T>`
 
-- Vue-free core behind `useTask`
+Vue-free ядро под капотом у `useTask()`. Можно использовать с любыми промисами.
 
 ```ts
 const readFileTask = new BareTask(() => fs.readFile("vulpes.3a"));
@@ -463,9 +536,13 @@ while (count++ < 10) {
 ```
 
 ---
+layout: section-3
+---
 
-# Comparison with other libraries
+# Другие либы
 
+---
+layout: default-6
 ---
 
 # `vue-promised`
@@ -475,7 +552,7 @@ const { data, error, isPending, isResolved, isRejected } = usePromise(
   fetch("/users")
 );
 
-// or
+// или
 
 const prom = ref(null);
 const promState = usePromise(prom);
@@ -486,22 +563,26 @@ function runFetch() {
 ```
 
 ---
+layout: default-6
+---
 
 # `vue-promised`
 
-- pending delay out of the box
-- `data: Ref<T | null | undefined>` - not really strong
-- `error: Ref<Error | null | undefined>` - again not strong + you can `throw` literally anything, not only `Error`
-- no utils like scopes, error retry, abortation etc
+- Отложенный pending из коробки
+- `data: Ref<T | null | undefined>` - не type-safe
+- `error: Ref<Error | null | undefined>` - снова не type-safe + можно выкинуть (`throw`) буквально что угодно, а не только `Error`
+- Нет полезных утилиток со скоупами, error-retry, отменами etc
 
 ---
+layout: default-4
+---
 
-# `@vueuse/core`'s `useAsyncState`
+# `useAsyncState()` из `@vueuse/core`
 
 ```ts
 const { state, isLoading, execute } = useAsyncState(
   (id: string, page: number) => fetch(`/users/${id}/posts?page=${page}`),
-  null, // init state
+  null, // начальное состояние
   {
     immediate: false,
     resetOnExecute: true,
@@ -509,678 +590,81 @@ const { state, isLoading, execute } = useAsyncState(
 );
 
 execute(
-  // execution delay
+  // отложенный запуск
   500,
-  // untyped args...
+  // нетипизированные аргументы...
   123,
   "foo",
   false
 );
 ```
 
---- 
+---
+layout: default-4
+---
 
 # `@vueuse/core`
 
-- only suitable for state: naming, null returns
-- bad `execute` typing makes arguments passing useless
-- no scope utils
+- Изабельно только для **загрузки состояний**: useAsync**State**, бубны в случае безразличия к результату
+- Отсутствие типизации аргументов в `execute()` делает это бесполезным в принципе
+- Из коробки нет утилиток для повторения, скоупов etc
 
 ---
-
-# comparison with `swrv`
-
-- only for state
-- bad types
-- fetch-oriented
-- global singleton with all its outcomes
-- a lot of unnecessary non-tree-shakeable utilities
-- weird design decisions
-
+layout: default-2
 ---
 
-# comparison with `vswr`
+# `swrv`
 
-- only for state
-- null-data type
-- its... fine?
+- только для загрузки + fetch only!
+- проблемы с типами
+- глобальный синглтоно, со всеми вытекающими
+- не такие уж важные фичи, которые нельзя tree-shake'нуть
+- другие странные решения
 
+---
+layout: default-5
+---
+
+# `vswr`
+
+Как `swrv`, но не такое странное
+
+- только для загрузки, но не только fetch
+- небольшие проблемы с типами
+- в остальном... вроде ок?
+
+---
+layout: quote
 ---
 
 # Техническое на этом всё!
 
 ---
+layout: right
+---
 
 # Зачем эта презентация?
 
-- Получить фидбек - удобно это выглядит или нет, хочется ли затаскивать на проекты
-- Возможно кто-то захочет помочь в разработке и поддержке либы
+<br>
+
+Получить фидбек - удобно это выглядит или нет, хочется ли затаскивать на проекты.
+
+Возможно кто-то захочет помочь в разработке и поддержке либы.
 
 ---
+layout: default-2
+---
 
-# Название либы
+# Другие варианты названия либы?
+
+Разные примеры
 
 Было много вариантов:
 
-  - `@vue-async-tasks/*`
-  - `@vue-tasks/*`
-  - `@vue-async/*`
-  - `@vue-use-task/*`
-  - `@vue-use-tasks/*`
-  - `@vue-any-task/*`
-  - `@vue-any-async/*`
-  - `@vue-any-promise/*`
-  - `@vue-futures/*`
-  - `@vue-spawn-async/*`
-  - `@vue-async-spawn/*`
-  - `@sora-vue-promises/*`
-  - `@sora-vue-async/*`
-  - `@yava/*` (Yet Another Vue Async)
+> vue-async-tasks, vue-tasks, vue-async, vue-use-task, vue-use-tasks, vue-any-task, vue-any-async, vue-any-promise, vue-futures, vue-spawn-async, vue-async-spawn, sora-vue-promises, sora-vue-async, yava (Yet Another Vue Async), vulpes (vue loves promises)...
 
 ---
-
-# Но остановился на `vue-kakuyoku`
-
-<br>
-
-Kakuyoku - обещание (яп.)
-
-Вполне оправдано тем, какой компанией это разрабатывается
-
+layout: section
 ---
 
 # Спасибо за внимание!
-
----
-
-- Автоматическая параметризованная загрузка
-  - keep-alive данных при переключении между параметрами
-    - "грязная" пометка всех данных или только частично
-  - кэширование всех или *каких-то* данных напр. в `localStorage`
-  - чтобы это можно было тестить, без синглтонов
-  - time-to-live
-  - Автоматическая перезагрузка когда:
-    - network change
-    - window focus
-  - Prefetch by key
-- Error Retry для любых операций
-- Pending Delay для любых операций
-  
----
-layout: section
----
-
-# `vue-promised`
-
----
-
-# Загрузка данных и состояние промиса
-
-```ts
-const {
-  data,
-  error,
-  isDelayElapsed,
-  isPending,
-  isRejected,
-  isResolved,
-} = usePromise(axios.get('/users'))
-```
-
----
-
-# Side-effect callback
-
-```ts
-const myAction = ref<null | Promise<void>>(null)
-
-function doAction() {
-  myAction.value = axios.post('/hey')
-}
-
-const PENDING_DELAY = 500
-const { data } = usePromise(myAction, PENDING_DELAY)
-```
-
-
----
-clicks: 5
----
-
-# Параметризованная загрузка, keep-alive
-
-```ts {all|1|3-4|6-17|all}
-const storage = reactive(new Map<number, unknown>())
-
-const userId = ref(42)
-const loadedUser = computed(() => storage.get(userId.value))
-
-const fetchPromise = ref<null | Promise<void>>(null)
-const { isPending } = usePromise(fetchPromise)
-
-watch(
-  userId,
-  (id) => {
-    fetchPromise.value = fetch(`/users/${id}`).then(async (x) => {
-      storage.set(id, await x.json())
-    })
-  },
-  { immediate: true },
-)
-
-return { loadedUser, isPending }
-```
-
----
-
-# `<Promised />`
-
-```vue
-<template>
-  <Promised :promise="myAction">
-    <template #default="data">{{ data }}</template>
-    <template #pending>...</template>
-  </Promised>
-
-  <Promised :promise="myAction">
-    <template #combined="{ data, error, isPending }">
-      Данные: {{ data }} <br>
-      Ошибка: {{ error }} <br>
-      Загружается? {{ isPending }}
-    </template>
-  </Promised>
-</template>
-```
-
----
-
-# Pros & Cons
-
-<br>
-
-Pros:
-
-- Простая маленькая либа
-- Pending Delay по умолчанию
-- `<Promised />`
-
-Cons:
-
-- Проблемы с типами:
-  - `data` - `Ref<null | undefined | T>`. null-проблема
-  - `error` - `Ref<null | undefined | Error>`. null-проблема + `throw` можно делать с чем угодно
-- Нет механизма прерывания операции
-
----
-layout: section
----
-
-# `useAsyncState()`
-
-by `@vueuse/core`
-
----
-
-# Просто загрузка
-
-```ts
-const { state, error, isLoading, isReady, execute } = useAsyncState(axios.get('/users'), null, {
-  immediate: false,
-  delay: 600,
-  resetOnExecute: true,
-  onError(e) {
-    console.error(e)
-  },
-})
-
-execute(500)
-
-```
-
----
-clicks: 1
----
-
-# Параметризованная загрузка
-
-<br>
-
-Пример 1:
-
-```ts
-const params = reactive({ a: 0, b: 'foo' })
-
-const { execute, state } = useAsyncState(async () => axios.get(`/users/${params.a}/${params.b}`), null)
-
-watch(params, () => execute())
-```
-
-Пример 2:
-
-```ts {all|7-8}
-const { execute } = useAsyncState(async (a: number, b: string) => fetch(`/users/${a}/${b}`), null)
-
-const params = reactive({ a: 0, b: 'foo' })
-
-watch(params, ({ a, b }) => execute(300, a, b))
-
-// OOPS! No type errors!
-execute(500, 'foo', false)
-```
-
----
-
-# Callback
-
-```ts
-const { isLoading, error, execute } = useAsyncState(async (body: unknown) => {
-  await axios.post('/users/new', body)
-  return null
-}, null)
-
-function createUser(user: { name: string }) {
-  execute(0, user)
-}
-```
-
-Путает:
-
-- useAsync**State**
-- Два раза давать `null` или что-то другое
-
----
-
-# Pros & Cons
-
-<br>
-
-Pros:
-
-- отложенный запуск
-- delay
-- `state` - `Ref<T>`. Можно положить свой тип, и самому обработать случай пустого значения нормально.
-
-Cons:
-
-- `execute()` передаёт аргументы в функцию, но типов нет
-- Некрасиво для side-effect'ов
-
----
-layout: section
----
-
-# `swrv`
-
----
-
-# Примеры
-
-```ts
-const { data, error } = useSWRV('/api/user', fetcher)
-
-return {
-  data,
-  error,
-}
-```
-
-```ts
-const endpoint = ref('/api/user/Geralt')
-const { data, error, mutate } = useSWRV(endpoint.value, fetch)
-
-return {
-  endpoint,
-  data,
-  error,
-}
-```
-
----
-
-# Prefetch
-
-
-```ts
-import { mutate } from 'swrv'
-
-function prefetch() {
-  mutate(
-    '/api/data',
-    fetch('/api/data').then((res) => res.json())
-  )
-  // the second parameter is a Promise
-  // SWRV will use the result when it resolves
-}
-```
-
----
-
-# Решения, которые мы заслужили
-
-<div class="grid grid-cols-5 gap-4">
-
-<div class="col-span-2">
-
-```ts
-const STATES = {
-  VALIDATING: 'VALIDATING',
-  PENDING: 'PENDING',
-  SUCCESS: 'SUCCESS',
-  ERROR: 'ERROR',
-  STALE_IF_ERROR: 'STALE_IF_ERROR',
-}
-```
-
-</div>
-
-<div class="col-span-3">
-
-```ts
-export default function (data, error, isValidating) {
-  const state = ref('idle')
-  watchEffect(() => {
-    if (data.value && isValidating.value) {
-      state.value = STATES.VALIDATING
-    } else if (data.value && error.value) {
-      state.value = STATES.STALE_IF_ERROR
-    } else if (data.value === undefined && !error.value) {
-      state.value = STATES.PENDING
-    } else if (data.value && !error.value) {
-      state.value = STATES.SUCCESS
-    } else if (data.value === undefined && error) {
-      state.value = STATES.ERROR
-    }
-  })
-
-  return {
-    state,
-    STATES,
-  }
-}
-```
-
-</div>
-</div>
-
----
-
-# продолжение...
-
-```vue
-<template>
-  <div>
-    <div v-if="[STATES.ERROR, STATES.STALE_IF_ERROR].includes(state)">
-      {{ error }}
-    </div>
-    <div v-if="[STATES.PENDING].includes(state)">Loading...</div>
-    <div v-if="[STATES.VALIDATING].includes(state)">
-      <!-- serve stale content without "loading" -->
-    </div>
-    <div
-      v-if="
-        [STATES.SUCCESS, STATES.VALIDATING, STATES.STALE_IF_ERROR].includes(
-          state
-        )
-      "
-    >
-      {{ data }}
-    </div>
-  </div>
-</template>
-```
-
----
-
-# Pros & Cons
-
-<br>
-
-Pros
-
-- Из коробки простая загрузка по ключам
-- Cache
-- Error Retry
-- Requests Deduplication
-- Prefetch
-
-Cons
-
-- Глобальное состояние
-- Проблемы с типами
-- Не использовать с колбэками
-- Местами "прикольные" решения
-
----
-layout: section
----
-
-# `vswr`
-
-Это не то же самое, что было только что!
-
---- 
-
-
-# Pros & Cons
-
-Мне лень давать примеры, так что...
-
-Pros:
-
-- Всё, что есть в `swrv`
-- Можно создавать раздельные SWR инстансы
-- Можно свой кэш добавить
-
-Cons:
-
-- Не юзабельно для сайд эффектов
-- Опять null-проблема
-
----
-layout: section
----
-
-# И что ты предлагаешь?
-
----
-
-# `Task<T>`
-
-Базовый кирпичик для всего остального
-
-Инкапсулирует
-
-- асинхронную
-- непараметризованную
-- повторяемую
-- возможно прерываемую
-
-операцию.
-
----
-
-# Инициализация таски
-
-```ts
-const task = useTask(async (onAbort) => {
-  // do async stuff...
-  await delay(40)
-
-  // handle abort
-  onAbort(() => {
-    // ...
-  })
-
-  // return something (or nothing)
-  return 20
-})
-```
-
----
-
-# Состояние таски
-
-```ts
-watch(
-  () => task.state,
-  (state) => {
-    if (state.kind === 'ok') {
-      console.log(state.result)
-    } else if (state.kind === 'err') {
-      console.error(state.error)
-    } else if (state.kind === 'pending') {
-      console.log('pending...')
-    }
-
-    // also uninint & aborted
-  },
-)
-```
-
----
-
-# Запуск и прерывание
-
-```ts
-// just run
-task.run()
-
-// abort pending & run new task
-task.run()
-
-// run and wait for exactly this run
-// result is ok, err or aborted
-const result = await task.run()
-
-// just abort
-// auto call on scope dispose
-task.abort()
-```
-
----
-
-# Утилитки вокруг таски
-
-- `useLastTaskResult(task)`
-- `useDelayedPending(task, delay: MaybeRef<number>): Ref<boolean>`
-- `useDelayedPendingTask<T>(task: Task<T>, delay: MaybeRef<number>): Task<T>`
-- `useStaleIfErrorState(task)`
-- `useErrorRetry()`
-
----
-
-# Условная загрузка
-
----
-
-# Параметризованная загрузка
-
----
-
-# 
-
----
-
-# Out of Vue
-
-Можно использовать `BareTask<T>`, который почти всё то же, но не хранит состояние:
-
-```ts
-const task = new BareTask(async () => 42)
-const result = await task.run()
-
-expect(result).toEqual({ kind: 'ok', result: 42 })
-```
-
-```ts
-const ERR = new Error('got you')
-const task = new BareTask(async () => {
-  throw ERR
-})
-const result = await task.run()
-
-expect(result).toEqual({ kind: 'err', error: ERR })
-```
-
----
-
-# Канва презентации
-
-A -> Z
-
-A: Что нужно от промисов
-
-- Просто загрузить данные откуда-то
-- Автоматически ретраить при ошибках
-- Загружать данные параметризованно, или по условию, автоматически
-- Делать асинхронные сайд эффекты, навешивать на них удобства
-- Отменять операции
-- Состояние промисов (+ pending delay)
-- Дедупликация одинаковых запросов в промежуток времени
-- **Type-strong**
-- Можно мокать
-
-Продвинутая загрузка:
-
-- Stale-While-Revalidate
-- keep-alive данных с разными ключами
-- `localStorage` кэширование
-- Time-To-Live ревалидация
-- Ревалидация при фокусе / появлении сети
-- Prefetch
-
-B: Какие есть сейчас решения, в чём их минусы
-
-Простое:
-
-- `vue-promised` - плохие типы, особый путь с `Ref<Promise>`
-- `@vueuse/core` -> `useAsyncState`. Это только про загрузку. Плохие типы на аргументы внутренней функции
-- ...
-
-SWR:
-
-- `swrv` - всё плохо
-- `vswr` - всё хорошо, хотя к типам можно придраться, может ещё к чему
-
-C: Как новая либа решает различные задачи
-
-- `Task<T>` - база. Объяснить `TaskState<T>`, почему type-strong
-- `useTask()`, `.run()`, `.abort()`
-- Приятные use-as-you-want pluggable утилитки вокруг таски - error retry, last result, whenever ok/err, delayed pending
-- Особая утилитка - `useStaleIfErrorState`. Объяснить `Maybe<T>`, почему type-strong. Такой простой беспамятный SWR.
-- Условная и параметризованная загрузка - `useScope`
-- Сайд эффекты - разные примеры, с параметрами и без, `useDanglingScope`
-  - Простой вызов чего-то без параметров
-  - Вызов с параметрами, берущимися из состояния
-  - Stateless запуск с `useDanglingScope`
-  - Навешиваются все те же утилитки
-- Stale-While-Revalidate - TODO. Со скоупами можно сделать, надо только продумать дизайн, чтобы и кэш был, и ttl, и prefetch, и прочее
-- deduplication, revalidate-on-focus/network - TODO, сделать довольно просто
-- Прочее TODO (?):
-  - run dedup
-  - `useRerun`
-  - all-in-one `usePromise(prom: Promise<T>)`, комбинация `vue-promised` + `@vueuse/core` с нормальными типами. Только для одноразового промиса.
-  - all-in-one `useFullyPackedTask()`, сочетающая в себе `useTask` + все утилитки 
-- Bonus - `BareTask<T>`
-
-D: Просьба дать фидбек, хотят ли использовать, хотят ли помочь
-
-- Насколько такое видится полезным, насколько хочется использовать. Btw лично я буду в любом случае, избавляет от необходимости ставить разные любы и ломать голову, как их дружить.
-- Как назвать либу?
-  - `@vue-async-tasks/*`
-  - `@vue-tasks/*`
-  - `@vue-async/*`
-  - `@vue-use-task/*`
-  - `@vue-use-tasks/*`
-  - `@vue-any-task/*`
-  - `@vue-any-async/*`
-  - `@vue-any-promise/*`
-  - `@vue-futures/*`
-  - `@vue-spawn-async/*`
-  - `@vue-async-spawn/*`
-  - `@sora-vue-promises/*`
-  - `@sora-vue-async/*`
-  - `@yava/*` (Yet Another Vue Async)
-- Если есть мысли, пожелания - contribution welcome
-
----

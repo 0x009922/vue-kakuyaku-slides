@@ -2,13 +2,11 @@ lockfileVersion: 5.4
 
 specifiers:
   '@slidev/cli': ^0.33.0
-  '@slidev/theme-default': '*'
-  '@slidev/theme-seriph': '*'
+  '@slidev/theme-shibainu': ^0.0.2
 
 dependencies:
   '@slidev/cli': 0.33.1
-  '@slidev/theme-default': 0.21.2
-  '@slidev/theme-seriph': 0.21.2
+  '@slidev/theme-shibainu': 0.0.2
 
 packages:
 
@@ -226,19 +224,9 @@ packages:
       js-yaml: 4.1.0
     dev: false
 
-  /@slidev/theme-default/0.21.2:
-    resolution: {integrity: sha512-neUucFs2YrRZZd73QwvLTyRG/o1nerDFUR5t8YAmXVLTMzWfY71flQ6aAhjYf+WjsozYsOHcxi/pZtIzZ4VhTQ==}
-    engines: {node: '>=14.0.0', slidev: '>=0.19.2'}
-    dependencies:
-      '@slidev/types': 0.22.7
-      codemirror-theme-vars: 0.1.1
-      prism-theme-vars: 0.2.3
-      theme-vitesse: 0.1.14
-    dev: false
-
-  /@slidev/theme-seriph/0.21.2:
-    resolution: {integrity: sha512-D3zhFYBmH1X37LX1LvTUPxAM1EEK6vMfy4hyxI9JIBXuugVq1WrfjcD+Lt9HnLpH1EqD3Mk+gS0lP/uC2TaVQw==}
-    engines: {node: '>=14.0.0', slidev: '>=0.19.3'}
+  /@slidev/theme-shibainu/0.0.2:
+    resolution: {integrity: sha512-iLGt1UfX9tQMfPQclLMQRNM2DPasWksP/jGr7bKu5NdoPBNHSzYf086A4h46HiNlWOloEnxtAvG1VTdMCKfpIg==}
+    engines: {node: '>=14.0.0'}
     dependencies:
       '@slidev/types': 0.22.7
       codemirror-theme-vars: 0.1.1
