@@ -18,7 +18,7 @@ layout: cover
 layout: default-2
 ---
 
-# 確約 (kakuyaku) - обещание (яп.)
+# "Kakuyaku" (яп. 確約) - обещание, "Promise"
 
 Перевод названия
 
@@ -637,7 +637,7 @@ layout: default-5
 layout: quote
 ---
 
-# Техническое на этом всё!
+# На этом всё!
 
 ---
 layout: right
